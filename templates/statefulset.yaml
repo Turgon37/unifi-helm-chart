@@ -1,0 +1,226 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "unifi.fullname" . }}
+  labels:
+    {{- include "unifi.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "unifi.fullname" . }}-headless
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "unifi.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        {{- include "unifi.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "unifi.serviceAccountName" . }}
+      {{- else if .Values.serviceAccount.name }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+
+      initContainers:
+        - name: init-mongodb
+          image: mongo:7.0
+          command:
+            - sh
+            - -c
+            - |
+              echo "Ensuring unifi user exists and has dbOwner on all required databases..."
+              mongosh "mongodb://${MONGO_ADMIN_USER}:${MONGO_ADMIN_PASS}@${MONGO_HOST}:${MONGO_PORT}/admin" <<EOF
+              use admin
+              if (db.getUser("${UNIFI_DB_USER}") == null) {
+                print("Creating user ${UNIFI_DB_USER}...");
+                db.createUser({
+                  user: "${UNIFI_DB_USER}",
+                  pwd: "${UNIFI_DB_PASS}",
+                  roles: []
+                })
+              } else {
+                print("User ${UNIFI_DB_USER} already exists, updating password...");
+                db.updateUser("${UNIFI_DB_USER}", { pwd: "${UNIFI_DB_PASS}" })
+              }
+
+              # Grant dbOwner on UniFi databases
+              db.grantRolesToUser("${UNIFI_DB_USER}", [{ role: "dbOwner", db: "unifi" }])
+              db.grantRolesToUser("${UNIFI_DB_USER}", [{ role: "dbOwner", db: "unifi_stat" }])
+              db.grantRolesToUser("${UNIFI_DB_USER}", [{ role: "dbOwner", db: "unifi_audit" }])
+              EOF
+          env:
+          {{- with .Values.database }}
+            - name: MONGO_HOST
+              value: {{ .host }}
+            - name: MONGO_PORT
+              value: "{{ .port }}"
+            - name: MONGO_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .initCredentials.secretName }}
+                  key: {{ .initCredentials.usernameKey }}
+            - name: MONGO_ADMIN_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .initCredentials.secretName }}
+                  key: {{ .initCredentials.passwordKey }}
+            - name: UNIFI_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .credentials.secretName }}
+                  key: {{ .credentials.usernameKey }}
+            - name: UNIFI_DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .credentials.secretName }}
+                  key: {{ .credentials.passwordKey }}
+          {{- end }}
+
+      containers:
+        - name: unifi
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            # TCP
+            - name: https-ui
+              containerPort: 8443
+              protocol: TCP
+            - name: inform
+              containerPort: 8080
+              protocol: TCP
+            - name: guest-https
+              containerPort: 8843
+              protocol: TCP
+            - name: guest-http
+              containerPort: 8880
+              protocol: TCP
+            - name: speedtest
+              containerPort: 6789
+              protocol: TCP
+            # UDP
+            - name: stun
+              containerPort: 3478
+              protocol: UDP
+            - name: discovery
+              containerPort: 10001
+              protocol: UDP
+            - name: syslog
+              containerPort: 5514
+              protocol: UDP
+          env:
+            - name: PUID
+              value: "{{ .Values.env.PUID }}"
+            - name: PGID
+              value: "{{ .Values.env.PGID }}"
+            - name: TZ
+              value: "{{ .Values.env.TZ }}"
+          {{- with .Values.database }}
+            - name: MONGO_HOST
+              value: {{ .host }}
+            - name: MONGO_PORT
+              value: "{{ .port }}"
+            - name: MONGO_DBNAME
+              value: {{ .dbName }}
+            - name: MONGO_AUTHSOURCE
+              value: {{ .authSource }}
+            - name: MONGO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .credentials.secretName }}
+                  key: {{ .credentials.usernameKey }}
+            - name: MONGO_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .credentials.secretName }}
+                  key: {{ .credentials.passwordKey }}
+          {{- end }}
+            {{- if .Values.env.EXTRA_ARGS }}
+            - name: EXTRA_ARGS
+              value: "{{ .Values.env.EXTRA_ARGS }}"
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: https-ui
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: https-ui
+              scheme: HTTPS
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+      {{- if .Values.securityContext.enabled }}
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+        fsGroupChangePolicy: {{ .Values.securityContext.fsGroupChangePolicy | quote }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+        runAsGroup: {{ .Values.securityContext.runAsGroup }}
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: config
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 8 }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+        {{- if .Values.persistence.storageClass }}
+        storageClassName: "{{ .Values.persistence.storageClass }}"
+        {{- end }}
+  {{- else }}
+  # fallback: use emptyDir for /config when persistence is disabled
+  volumeClaimTemplates: []
+  template:
+    spec:
+      volumes:
+        - name: config
+          emptyDir: {}
+  {{- end }}

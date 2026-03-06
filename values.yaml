@@ -1,0 +1,149 @@
+image:
+  repository: linuxserver/unifi-network-application
+  tag: 10.0.160
+  pullPolicy: IfNotPresent
+
+env:
+  PUID: "1000"
+  PGID: "1000"
+  TZ: "Europe/Paris"
+  # Add custom env here if needed
+  # EXTRA_ARGS: ""
+extraEnv: []  # list of { name: "", value: "" }
+
+database:
+  host: "mongodb"
+  port: 27017
+  dbName: unifi
+  authSource: admin
+  credentials:
+    secretName: "unifi-db-credentials"
+    usernameKey: "username"
+    passwordKey: "password"
+  initCredentials:
+    secretName: "unifi-db-credentials"
+    usernameKey: "admin-username"
+    passwordKey: "admin-password"
+
+
+# Pod settings
+replicaCount: 1
+revisionHistoryLimit: 3
+
+podAnnotations: {}
+podLabels: {}
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    memory: 2Gi
+
+securityContext:
+  enabled: true
+  runAsUser: 0
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: "OnRootMismatch"
+
+# Probes against the controller UI on 8443
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 90
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readiness:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 12
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: false
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# Persistent data at /config
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes: ["ReadWriteOnce"]
+  size: 5Gi
+  annotations: {}
+
+services:
+  tcp:
+    enabled: true
+    type: ClusterIP            # or LoadBalancer / NodePort
+    annotations: {}
+    loadBalancerIP: ""
+    ports:
+      - name: https-ui
+        port: 8443
+        targetPort: 8443
+        protocol: TCP
+      - name: inform
+        port: 8080
+        targetPort: 8080
+        protocol: TCP
+      - name: guest-https
+        port: 8843
+        targetPort: 8843
+        protocol: TCP
+      - name: guest-http
+        port: 8880
+        targetPort: 8880
+        protocol: TCP
+      - name: speedtest
+        port: 6789
+        targetPort: 6789
+        protocol: TCP
+
+  udp:
+    enabled: true
+    type: ClusterIP
+    annotations: {}
+    loadBalancerIP: ""
+    ports:
+      - name: stun
+        port: 3478
+        targetPort: 3478
+        protocol: UDP
+      - name: discovery
+        port: 10001
+        targetPort: 10001
+        protocol: UDP
+      - name: syslog
+        port: 5514
+        targetPort: 5514
+        protocol: UDP
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: unifi.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          servicePortName: https-ui
+  tls: [] # e.g. [{ hosts: ["unifi.example.com"], secretName: unifi-tls }]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Extra containers/volumes if you need sidecars or custom mounts
+extraVolumeMounts: []
+extraVolumes: []
