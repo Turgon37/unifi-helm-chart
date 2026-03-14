@@ -114,13 +114,13 @@ podSecurityContext:
 probes:
   liveness:
     enabled: true
-    initialDelaySeconds: 90
+    initialDelaySeconds: 20
     periodSeconds: 15
     timeoutSeconds: 5
     failureThreshold: 6
   readiness:
     enabled: true
-    initialDelaySeconds: 60
+    initialDelaySeconds: 20
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 12
