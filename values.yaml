@@ -32,6 +32,31 @@ revisionHistoryLimit: 3
 
 podAnnotations: {}
 podLabels: {}
+podPorts:
+  https-ui:
+    containerPort: 8443
+    protocol: TCP
+  http-inform:
+    containerPort: 8080
+    protocol: TCP
+  guest-https:
+    containerPort: 8843
+    protocol: TCP
+  guest-http:
+    containerPort: 8880
+    protocol: TCP
+  speedtest:
+    containerPort: 6789
+    protocol: TCP
+  stun:
+    containerPort: 3478
+    protocol: UDP
+  discovery:
+    containerPort: 10001
+    protocol: UDP
+  syslog:
+    containerPort: 5514
+    protocol: UDP
 
 resources:
   requests:
@@ -82,62 +107,47 @@ persistence:
   annotations: {}
 
 services:
-  tcp:
-    enabled: true
-    type: ClusterIP            # or LoadBalancer / NodePort
-    annotations: {}
-    loadBalancerIP: ""
-    ports:
-      - name: https-ui
-        port: 8443
-        targetPort: 8443
-        protocol: TCP
-      - name: inform
-        port: 8080
-        targetPort: 8080
-        protocol: TCP
-      - name: guest-https
-        port: 8843
-        targetPort: 8843
-        protocol: TCP
-      - name: guest-http
-        port: 8880
-        targetPort: 8880
-        protocol: TCP
-      - name: speedtest
-        port: 6789
-        targetPort: 6789
-        protocol: TCP
-
-  udp:
+  # internal use only because other port must be reachable from devices
+  internal:
     enabled: true
     type: ClusterIP
     annotations: {}
     loadBalancerIP: ""
-    ports:
-      - name: stun
-        port: 3478
-        targetPort: 3478
-        protocol: UDP
-      - name: discovery
-        port: 10001
-        targetPort: 10001
-        protocol: UDP
-      - name: syslog
-        port: 5514
-        targetPort: 5514
-        protocol: UDP
+    # must refer to podPorts
+    enablePorts:
+      https-ui: true
+      http-inform: false
+      guest-https: false
+      guest-http: false
+      speedtest: false
+      stun: false
+      discovery: false
+      syslog: false
+  public:
+    enabled: false
+    type: LoadBalancer
+    annotations: {}
+    loadBalancerIP: ""
+    enablePorts:
+      https-ui: false
+      http-inform: true
+      guest-https: true
+      guest-http: true
+      speedtest: true
+      stun: true
+      discovery: true
+      syslog: true
 
 ingress:
   enabled: false
   className: ""
-  annotations: {}
+  annotations:
+    server-ssl: "true"
   hosts:
     - host: unifi.example.com
       paths:
         - path: /
           pathType: Prefix
-          servicePortName: https-ui
   tls: [] # e.g. [{ hosts: ["unifi.example.com"], secretName: unifi-tls }]
 
 nodeSelector: {}

@@ -88,33 +88,13 @@ spec:
         - name: unifi
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.podPorts }}
           ports:
-            # TCP
-            - name: https-ui
-              containerPort: 8443
-              protocol: TCP
-            - name: inform
-              containerPort: 8080
-              protocol: TCP
-            - name: guest-https
-              containerPort: 8843
-              protocol: TCP
-            - name: guest-http
-              containerPort: 8880
-              protocol: TCP
-            - name: speedtest
-              containerPort: 6789
-              protocol: TCP
-            # UDP
-            - name: stun
-              containerPort: 3478
-              protocol: UDP
-            - name: discovery
-              containerPort: 10001
-              protocol: UDP
-            - name: syslog
-              containerPort: 5514
-              protocol: UDP
+            {{- range $name, $spec := . }}
+            - name: {{ $name }}
+              {{- toYaml $spec | nindent 14 }}
+            {{- end }}
+          {{- end }}
           env:
             - name: PUID
               value: "{{ .Values.env.PUID }}"
@@ -201,7 +181,6 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-
   {{- if .Values.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:
