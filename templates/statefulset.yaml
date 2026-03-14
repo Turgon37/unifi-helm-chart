@@ -51,7 +51,7 @@ spec:
                 db.updateUser("${UNIFI_DB_USER}", { pwd: "${UNIFI_DB_PASS}" })
               }
 
-              # Grant dbOwner on UniFi databases
+              // Grant dbOwner on UniFi databases
               db.grantRolesToUser("${UNIFI_DB_USER}", [{ role: "dbOwner", db: "unifi" }])
               db.grantRolesToUser("${UNIFI_DB_USER}", [{ role: "dbOwner", db: "unifi_stat" }])
               db.grantRolesToUser("${UNIFI_DB_USER}", [{ role: "dbOwner", db: "unifi_audit" }])
