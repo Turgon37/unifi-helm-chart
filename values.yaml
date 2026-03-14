@@ -1,6 +1,6 @@
 image:
   repository: linuxserver/unifi-network-application
-  tag: 10.0.160
+  tag: ~
   pullPolicy: IfNotPresent
 
 env:

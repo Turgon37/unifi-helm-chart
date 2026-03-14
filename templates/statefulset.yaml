@@ -90,7 +90,7 @@ spec:
 
       containers:
         - name: unifi
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion  | toString }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.podPorts }}
           ports:
