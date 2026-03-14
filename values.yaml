@@ -26,6 +26,37 @@ database:
     usernameKey: "admin-username"
     passwordKey: "admin-password"
 
+networkPolicy:
+  enabled: false
+  cilium:
+    egress:
+    - toFQDNs:
+      - matchName: fw-update.ubnt.com
+      - matchName: fw-download.ubnt.com
+    - toEndpoints:
+      - matchLabels:
+          k8s:io.kubernetes.pod.namespace: kube-system
+          k8s:k8s-app: kube-dns
+      toPorts:
+      - ports:
+        - port: "53"
+          protocol: UDP
+        - port: "53"
+          protocol: TCP
+        rules:
+          dns:
+          - matchName: fw-update.ubnt.com
+          - matchName: fw-download.ubnt.com
+    ingress:
+    - toPorts:
+      - ports:
+        - port: http-inform
+  flavor: kubernetes
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: http-inform
+  egress: {}
 
 # Pod settings
 replicaCount: 1
